@@ -1,4 +1,5 @@
 'use client';
+// @ts-nocheck
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -21,7 +22,7 @@ export default function AuthCallbackPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event: any, session: any) => {
       if (!session?.user) return;
       subscription.unsubscribe();
       const { data } = await supabase

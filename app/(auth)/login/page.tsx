@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Field, Input, Text, makeStyles, tokens, Divider } from '@fluentui/react-components';
