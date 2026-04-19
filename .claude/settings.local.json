@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(mkdir -p C:/Users/Lamek/Projetos/evoquest-v2/app/\\\\\\(auth\\\\\\)/login C:/Users/Lamek/Projetos/evoquest-v2/app/dashboard C:/Users/Lamek/Projetos/evoquest-v2/app/projects/\\\\[id\\\\] C:/Users/Lamek/Projetos/evoquest-v2/app/agenda C:/Users/Lamek/Projetos/evoquest-v2/app/habits C:/Users/Lamek/Projetos/evoquest-v2/app/para C:/Users/Lamek/Projetos/evoquest-v2/app/character C:/Users/Lamek/Projetos/evoquest-v2/app/charts C:/Users/Lamek/Projetos/evoquest-v2/app/workout C:/Users/Lamek/Projetos/evoquest-v2/app/diet C:/Users/Lamek/Projetos/evoquest-v2/app/finances C:/Users/Lamek/Projetos/evoquest-v2/app/profile)",
+      "Bash(mkdir -p C:/Users/Lamek/Projetos/evoquest-v2/components/layout C:/Users/Lamek/Projetos/evoquest-v2/components/rpg C:/Users/Lamek/Projetos/evoquest-v2/components/projects C:/Users/Lamek/Projetos/evoquest-v2/components/agenda C:/Users/Lamek/Projetos/evoquest-v2/components/shared)",
+      "Bash(mkdir -p C:/Users/Lamek/Projetos/evoquest-v2/store C:/Users/Lamek/Projetos/evoquest-v2/lib)",
+      "Bash(npm run *)",
+      "Bash(node *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/dashboard)"
+    ]
+  }
+}
