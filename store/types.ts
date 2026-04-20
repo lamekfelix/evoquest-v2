@@ -23,10 +23,29 @@ export interface User {
 
 export type ProjectStatus = 'inbox' | 'planned' | 'in-progress' | 'done';
 
+export interface Tag {
+  id: string;
+  name: string;
+  color: string;
+}
+
 export interface TodoItem {
   id: string;
   text: string;
   done: boolean;
+  createdAt: string;
+}
+
+export type TaskStatus = 'todo' | 'in_progress' | 'done';
+
+export interface Task {
+  id: string;
+  projectId: string;
+  title: string;
+  description?: string;
+  startDate?: string;
+  endDate?: string;
+  status: TaskStatus;
   createdAt: string;
 }
 
@@ -35,7 +54,9 @@ export interface Project {
   name: string;
   description: string;
   status: ProjectStatus;
+  icon?: string;
   area?: string;
+  areaId?: string;
   attribute: AttributeKey;
   startDate?: string;
   endDate?: string;
@@ -82,23 +103,25 @@ export interface Area {
   name: string;
   description?: string;
   icon?: string;
+  color?: string;
 }
 
 export interface Resource {
   id: string;
   name: string;
-  url?: string;
   description?: string;
+  link?: string;
   areaId?: string;
-  tags: string[];
+  projectIds: string[];
+  tags: Tag[];
   createdAt: string;
 }
 
 export interface Archive {
   id: string;
   name: string;
-  content?: string;
-  type: 'project' | 'resource' | 'note';
+  originalType: 'project' | 'area' | 'resource';
+  originalData: unknown;
   archivedAt: string;
 }
 
@@ -150,11 +173,22 @@ export interface Transaction {
   date: string;
 }
 
+export interface XPEvent {
+  id: string;
+  date: string;
+  attr: AttributeKey;
+  amount: number;
+  reason: string;
+  timestamp: number;
+  levelUp?: boolean;
+}
+
 export interface AppState {
   user: User | null;
   attrXp: Record<AttributeKey, number>;
   habits: Habit[];
   projects: Project[];
+  tasks: Task[];
   areas: Area[];
   resources: Resource[];
   archives: Archive[];
@@ -164,6 +198,8 @@ export interface AppState {
   finances: Transaction[];
   waterToday: number;
   xpGainedToday: number;
+  xpEvents: XPEvent[];
+  xpHistory: XPEvent[];
   darkMode: boolean;
   sidebarCollapsed: boolean;
 }

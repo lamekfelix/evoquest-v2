@@ -8,18 +8,21 @@ import {
 } from '@fluentui/react-components';
 import {
   HomeRegular, HomeFilled,
-  TaskListSquareLtrRegular, TaskListSquareLtrFilled,
   CalendarRegular, CalendarFilled,
-  HeartPulseRegular, HeartPulseFilled,
+  TargetArrowRegular,
   FolderRegular,
+  BookRegular,
+  ArchiveRegular,
+  CheckmarkCircleRegular,
+  TrophyRegular,
+  PersonRunningRegular,
+  FoodRegular,
+  WalletRegular,
   PersonRegular,
   DataBarVerticalRegular,
-  WeatherSunnyRegular,
-  FoodRegular,
-  MoneyRegular,
+  SettingsRegular,
   NavigationRegular,
   ChevronDoubleLeftRegular,
-  ShieldRegular,
 } from '@fluentui/react-icons';
 import { useAppStore } from '@/store/useAppStore';
 import { getLevelFromXp } from '@/lib/xp';
@@ -101,27 +104,36 @@ interface NavItem {
   iconActive: React.ReactElement;
 }
 
-const mainNav: NavItem[] = [
+const principalNav: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: <HomeRegular />, iconActive: <HomeFilled /> },
-  { href: '/projects', label: 'Projetos', icon: <TaskListSquareLtrRegular />, iconActive: <TaskListSquareLtrFilled /> },
   { href: '/agenda', label: 'Agenda', icon: <CalendarRegular />, iconActive: <CalendarFilled /> },
-  { href: '/habits', label: 'Hábitos', icon: <HeartPulseRegular />, iconActive: <HeartPulseFilled /> },
 ];
 
-const lifeNav: NavItem[] = [
-  { href: '/workout', label: 'Treino', icon: <WeatherSunnyRegular />, iconActive: <WeatherSunnyRegular /> },
+const sistemaNav: NavItem[] = [
+  { href: '/projects', label: 'Projetos', icon: <TargetArrowRegular />, iconActive: <TargetArrowRegular /> },
+  { href: '/areas', label: 'Áreas', icon: <FolderRegular />, iconActive: <FolderRegular /> },
+  { href: '/resources', label: 'Resources', icon: <BookRegular />, iconActive: <BookRegular /> },
+  { href: '/archives', label: 'Archives', icon: <ArchiveRegular />, iconActive: <ArchiveRegular /> },
+];
+
+const habitsNav: NavItem[] = [
+  { href: '/habits', label: 'Hábitos', icon: <CheckmarkCircleRegular />, iconActive: <CheckmarkCircleRegular /> },
+  { href: '/quests', label: 'Quests', icon: <TrophyRegular />, iconActive: <TrophyRegular /> },
+];
+
+const corpoNav: NavItem[] = [
+  { href: '/workout', label: 'Treino', icon: <PersonRunningRegular />, iconActive: <PersonRunningRegular /> },
   { href: '/diet', label: 'Dieta', icon: <FoodRegular />, iconActive: <FoodRegular /> },
-  { href: '/finances', label: 'Finanças', icon: <MoneyRegular />, iconActive: <MoneyRegular /> },
 ];
 
-const knowledgeNav: NavItem[] = [
-  { href: '/para', label: 'Áreas & Resources', icon: <FolderRegular />, iconActive: <FolderRegular /> },
-  { href: '/charts', label: 'Evolução', icon: <DataBarVerticalRegular />, iconActive: <DataBarVerticalRegular /> },
+const financasNav: NavItem[] = [
+  { href: '/finances', label: 'Finanças', icon: <WalletRegular />, iconActive: <WalletRegular /> },
 ];
 
 const rpgNav: NavItem[] = [
-  { href: '/character', label: 'Personagem', icon: <ShieldRegular />, iconActive: <ShieldRegular /> },
-  { href: '/profile', label: 'Perfil', icon: <PersonRegular />, iconActive: <PersonRegular /> },
+  { href: '/character', label: 'Personagem', icon: <PersonRegular />, iconActive: <PersonRegular /> },
+  { href: '/charts', label: 'Evolução', icon: <DataBarVerticalRegular />, iconActive: <DataBarVerticalRegular /> },
+  { href: '/profile', label: 'Perfil', icon: <SettingsRegular />, iconActive: <SettingsRegular /> },
 ];
 
 export function Sidebar() {
@@ -204,9 +216,11 @@ export function Sidebar() {
 
       {/* Navegação */}
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-        <NavSection label="Principal" items={mainNav} />
-        <NavSection label="Estilo de Vida" items={lifeNav} />
-        <NavSection label="Conhecimento" items={knowledgeNav} />
+        <NavSection label="Principal" items={principalNav} />
+        <NavSection label="Sistema Para" items={sistemaNav} />
+        <NavSection label="Hábitos & Quests" items={habitsNav} />
+        <NavSection label="Corpo" items={corpoNav} />
+        <NavSection label="Finanças" items={financasNav} />
         <NavSection label="RPG" items={rpgNav} />
       </div>
 

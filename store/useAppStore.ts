@@ -3,9 +3,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type {
-  AppState, User, Habit, Project, Area, Resource, Archive,
+  AppState, User, Habit, Project, Task, Area, Resource, Archive,
   AgendaItem, Workout, Meal, Transaction, AttributeKey,
-  ProjectStatus, TodoItem,
+  ProjectStatus, TaskStatus, TodoItem,
 } from './types';
 import { INITIAL_ATTR_XP } from './constants';
 import { calcTotalXp, getLevelFromXp } from '@/lib/xp';
@@ -32,6 +32,30 @@ interface AppActions {
   addTodo: (projectId: string, text: string) => void;
   toggleTodo: (projectId: string, todoId: string) => void;
   deleteTodo: (projectId: string, todoId: string) => void;
+
+  // Tasks
+  addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
+  updateTask: (id: string, partial: Partial<Task>) => void;
+  deleteTask: (id: string) => void;
+  moveTaskStatus: (id: string, status: TaskStatus) => void;
+  updateProjectIcon: (id: string, icon: string) => void;
+
+  // Áreas
+  addArea: (area: Omit<Area, 'id'>) => void;
+  updateArea: (id: string, partial: Partial<Area>) => void;
+  deleteArea: (id: string) => void;
+
+  // Resources
+  addResource: (resource: Omit<Resource, 'id' | 'createdAt'>) => void;
+  updateResource: (id: string, partial: Partial<Resource>) => void;
+  deleteResource: (id: string) => void;
+
+  // Archives
+  archiveProject: (id: string) => void;
+  archiveArea: (id: string) => void;
+  archiveResource: (id: string) => void;
+  restoreFromArchive: (id: string) => void;
+  deleteFromArchive: (id: string) => void;
 
   // Agenda
   addAgendaItem: (item: Omit<AgendaItem, 'id'>) => void;
@@ -64,6 +88,7 @@ const initialState: AppState = {
   attrXp: { ...INITIAL_ATTR_XP },
   habits: [],
   projects: [],
+  tasks: [],
   areas: [],
   resources: [],
   archives: [],
@@ -171,6 +196,111 @@ export const useAppStore = create<AppState & AppActions>()(
             return { ...p, todos: p.todos.filter((t) => t.id !== todoId) };
           }),
         })),
+
+      addTask: (task) =>
+        set((s) => ({
+          tasks: [...s.tasks, { ...task, id: generateId(), createdAt: dateISO() }],
+        })),
+
+      updateTask: (id, partial) =>
+        set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, ...partial } : t)) })),
+
+      deleteTask: (id) =>
+        set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) })),
+
+      moveTaskStatus: (id, status) =>
+        set((s) => {
+          const task = s.tasks.find((t) => t.id === id);
+          if (!task) return s;
+          const wasDone = task.status === 'done';
+          const newTasks = s.tasks.map((t) => (t.id === id ? { ...t, status } : t));
+          if (status === 'done' && !wasDone) {
+            const project = s.projects.find((p) => p.id === task.projectId);
+            if (project) {
+              const attrXp = { ...s.attrXp, [project.attribute]: (s.attrXp[project.attribute] ?? 0) + 15 };
+              const totalXp = calcTotalXp(attrXp);
+              const { level } = getLevelFromXp(totalXp);
+              const user = s.user ? { ...s.user, totalXp, level } : null;
+              return { tasks: newTasks, attrXp, user, xpGainedToday: s.xpGainedToday + 15 };
+            }
+          }
+          return { tasks: newTasks };
+        }),
+
+      updateProjectIcon: (id, icon) =>
+        set((s) => ({
+          projects: s.projects.map((p) => (p.id === id ? { ...p, icon } : p)),
+        })),
+
+      addArea: (area) =>
+        set((s) => ({ areas: [...s.areas, { ...area, id: generateId() }] })),
+
+      updateArea: (id, partial) =>
+        set((s) => ({ areas: s.areas.map((a) => (a.id === id ? { ...a, ...partial } : a)) })),
+
+      deleteArea: (id) =>
+        set((s) => ({ areas: s.areas.filter((a) => a.id !== id) })),
+
+      addResource: (resource) =>
+        set((s) => ({
+          resources: [...s.resources, { ...resource, id: generateId(), createdAt: dateISO() }],
+        })),
+
+      updateResource: (id, partial) =>
+        set((s) => ({
+          resources: s.resources.map((r) => (r.id === id ? { ...r, ...partial } : r)),
+        })),
+
+      deleteResource: (id) =>
+        set((s) => ({ resources: s.resources.filter((r) => r.id !== id) })),
+
+      archiveProject: (id) =>
+        set((s) => {
+          const item = s.projects.find((p) => p.id === id);
+          if (!item) return s;
+          const archive: Archive = {
+            id: generateId(), name: item.name,
+            originalType: 'project', originalData: item, archivedAt: dateISO(),
+          };
+          return { projects: s.projects.filter((p) => p.id !== id), archives: [...s.archives, archive] };
+        }),
+
+      archiveArea: (id) =>
+        set((s) => {
+          const item = s.areas.find((a) => a.id === id);
+          if (!item) return s;
+          const archive: Archive = {
+            id: generateId(), name: item.name,
+            originalType: 'area', originalData: item, archivedAt: dateISO(),
+          };
+          return { areas: s.areas.filter((a) => a.id !== id), archives: [...s.archives, archive] };
+        }),
+
+      archiveResource: (id) =>
+        set((s) => {
+          const item = s.resources.find((r) => r.id === id);
+          if (!item) return s;
+          const archive: Archive = {
+            id: generateId(), name: item.name,
+            originalType: 'resource', originalData: item, archivedAt: dateISO(),
+          };
+          return { resources: s.resources.filter((r) => r.id !== id), archives: [...s.archives, archive] };
+        }),
+
+      restoreFromArchive: (id) =>
+        set((s) => {
+          const entry = s.archives.find((a) => a.id === id);
+          if (!entry) return s;
+          const base = { archives: s.archives.filter((a) => a.id !== id) };
+          if (entry.originalType === 'project')
+            return { ...base, projects: [...s.projects, entry.originalData as Project] };
+          if (entry.originalType === 'area')
+            return { ...base, areas: [...s.areas, entry.originalData as Area] };
+          return { ...base, resources: [...s.resources, entry.originalData as Resource] };
+        }),
+
+      deleteFromArchive: (id) =>
+        set((s) => ({ archives: s.archives.filter((a) => a.id !== id) })),
 
       addAgendaItem: (item) =>
         set((s) => ({ agenda: [...s.agenda, { ...item, id: generateId() }] })),

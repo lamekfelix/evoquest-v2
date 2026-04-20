@@ -7,12 +7,13 @@ import {
   Dialog, DialogSurface, DialogTitle, DialogBody, DialogActions,
   Input, Select, Textarea, Badge, makeStyles, tokens,
 } from '@fluentui/react-components';
-import { AddRegular, DeleteRegular } from '@fluentui/react-icons';
+import { AddRegular, DeleteRegular, ArchiveRegular, EditRegular } from '@fluentui/react-icons';
 import { useAppStore } from '@/store/useAppStore';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ProjectEditDialog } from '@/components/projects/ProjectEditDialog';
 import { ATTRIBUTES } from '@/store/constants';
 import { dateISO } from '@/lib/utils';
-import type { AttributeKey, ProjectStatus } from '@/store/types';
+import type { AttributeKey, ProjectStatus, Project } from '@/store/types';
 
 const useStyles = makeStyles({
   page: { display: 'flex', flexDirection: 'column', gap: '24px' },
@@ -36,6 +37,8 @@ const useStyles = makeStyles({
   listGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' },
 });
 
+const PROJECT_ICONS = ['🚀','⭐','❤️','📚','💻','🎵','📷','🌍','⚡','🏆','🚩','💎','🔥','🎯','🧭','🎨','🌱','💡','🔬','🎮','🏠','🌙','🦋','🌊'];
+
 const COLUMNS: { key: ProjectStatus; label: string; color: string }[] = [
   { key: 'inbox', label: 'Inbox', color: '#9B8EA8' },
   { key: 'planned', label: 'Planejado', color: '#5B8DD9' },
@@ -46,9 +49,13 @@ const COLUMNS: { key: ProjectStatus; label: string; color: string }[] = [
 export default function ProjectsPage() {
   const styles = useStyles();
   const projects = useAppStore((s) => s.projects);
+  const tasks = useAppStore((s) => s.tasks);
+  const areas = useAppStore((s) => s.areas);
   const addProject = useAppStore((s) => s.addProject);
+  const updateProject = useAppStore((s) => s.updateProject);
   const deleteProject = useAppStore((s) => s.deleteProject);
   const updateProjectStatus = useAppStore((s) => s.updateProjectStatus);
+  const archiveProject = useAppStore((s) => s.archiveProject);
 
   const [view, setView] = useState<'kanban' | 'list'>('kanban');
   const [open, setOpen] = useState(false);
@@ -56,8 +63,12 @@ export default function ProjectsPage() {
   const [pDesc, setPDesc] = useState('');
   const [pStatus, setPStatus] = useState<ProjectStatus>('inbox');
   const [pAttr, setPAttr] = useState<AttributeKey>('foco');
+  const [pAreaId, setPAreaId] = useState('');
+  const [pIcon, setPIcon] = useState('🚀');
   const [pStart, setPStart] = useState('');
   const [pEnd, setPEnd] = useState('');
+
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
 
   function handleAdd() {
     if (!pName.trim()) return;
@@ -66,10 +77,12 @@ export default function ProjectsPage() {
       description: pDesc.trim(),
       status: pStatus,
       attribute: pAttr,
+      icon: pIcon,
+      areaId: pAreaId || undefined,
       startDate: pStart || undefined,
       endDate: pEnd || undefined,
     });
-    setPName(''); setPDesc(''); setPStart(''); setPEnd('');
+    setPName(''); setPDesc(''); setPAreaId(''); setPIcon('🚀'); setPStart(''); setPEnd('');
     setOpen(false);
   }
 
@@ -83,6 +96,38 @@ export default function ProjectsPage() {
 
   const today = dateISO();
 
+  function taskProgress(projectId: string) {
+    const pt = tasks.filter((t) => t.projectId === projectId);
+    if (!pt.length) return { pct: 0, label: '0/0' };
+    const done = pt.filter((t) => t.status === 'done').length;
+    return { pct: Math.round((done / pt.length) * 100), label: `${done}/${pt.length}` };
+  }
+
+  function ProjectCardActions({ p }: { p: Project }) {
+    return (
+      <div style={{ display: 'flex', gap: 2 }}>
+        <Button appearance="subtle" size="small" icon={<EditRegular />}
+          onClick={(e) => { e.preventDefault(); setEditingProject(p); }} title="Editar" />
+        <Button appearance="subtle" size="small" icon={<ArchiveRegular />}
+          onClick={(e) => { e.preventDefault(); archiveProject(p.id); }} title="Arquivar" />
+        <Button appearance="subtle" size="small" icon={<DeleteRegular />}
+          onClick={(e) => { e.preventDefault(); deleteProject(p.id); }} />
+      </div>
+    );
+  }
+
+  function ProgressBar({ projectId, attrColor }: { projectId: string; attrColor: string }) {
+    const { pct, label } = taskProgress(projectId);
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ height: 4, borderRadius: 2, background: tokens.colorNeutralBackground3, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? '#55B96B' : attrColor, borderRadius: 2 }} />
+        </div>
+        <Text size={100} style={{ color: pct === 100 ? '#55B96B' : tokens.colorNeutralForeground2 }}>{label} · {pct}%</Text>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
@@ -93,11 +138,7 @@ export default function ProjectsPage() {
           </Text>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <TabList
-            selectedValue={view}
-            onTabSelect={(_, d) => setView(d.value as 'kanban' | 'list')}
-            size="small"
-          >
+          <TabList selectedValue={view} onTabSelect={(_, d) => setView(d.value as 'kanban' | 'list')} size="small">
             <Tab value="kanban">Kanban</Tab>
             <Tab value="list">Lista</Tab>
           </TabList>
@@ -113,6 +154,18 @@ export default function ProjectsPage() {
           <DialogTitle>Novo Projeto</DialogTitle>
           <DialogBody>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className={styles.formField}>
+                <Text size={200}>Ícone</Text>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {PROJECT_ICONS.map((ic) => (
+                    <button key={ic} onClick={() => setPIcon(ic)} style={{
+                      width: 30, height: 30, fontSize: 16, borderRadius: 6, cursor: 'pointer',
+                      border: `2px solid ${pIcon === ic ? tokens.colorBrandBackground : 'transparent'}`,
+                      background: tokens.colorNeutralBackground3,
+                    }}>{ic}</button>
+                  ))}
+                </div>
+              </div>
               <div className={styles.formField}>
                 <Text size={200}>Nome *</Text>
                 <Input placeholder="Nome do projeto" value={pName} onChange={(_, d) => setPName(d.value)} />
@@ -135,6 +188,13 @@ export default function ProjectsPage() {
                   </Select>
                 </div>
                 <div className={styles.formField}>
+                  <Text size={200}>Área</Text>
+                  <Select value={pAreaId} onChange={(_, d) => setPAreaId(d.value)}>
+                    <option value="">Nenhuma</option>
+                    {areas.map((a) => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+                  </Select>
+                </div>
+                <div className={styles.formField}>
                   <Text size={200}>Início</Text>
                   <Input type="date" value={pStart} onChange={(_, d) => setPStart(d.value)} />
                 </div>
@@ -152,6 +212,16 @@ export default function ProjectsPage() {
         </DialogSurface>
       </Dialog>
 
+      {/* Dialog editar projeto */}
+      <ProjectEditDialog
+        project={editingProject}
+        open={editingProject !== null}
+        areas={areas}
+        onClose={() => setEditingProject(null)}
+        onSave={updateProject}
+        onDelete={deleteProject}
+      />
+
       {projects.length === 0 ? (
         <EmptyState
           icon="📋"
@@ -164,7 +234,6 @@ export default function ProjectsPage() {
           }
         />
       ) : view === 'kanban' ? (
-        /* Kanban */
         <div className={styles.kanban}>
           {COLUMNS.map((col) => {
             const colProjects = projects.filter((p) => p.status === col.key);
@@ -183,21 +252,23 @@ export default function ProjectsPage() {
                   return (
                     <Card key={p.id} className={styles.projectCard}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <Link href={`/projects/${p.id}`} style={{ flex: 1 }}>
+                        <Link href={`/projects/${p.id}`} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 18, flexShrink: 0 }}>{p.icon ?? '📋'}</span>
                           <Text size={300} weight="semibold" block>{p.name}</Text>
                         </Link>
-                        <Button
-                          appearance="subtle" size="small" icon={<DeleteRegular />}
-                          onClick={() => deleteProject(p.id)}
-                        />
+                        <ProjectCardActions p={p} />
                       </div>
                       {p.description && (
-                        <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}
-                          truncate block>{p.description}</Text>
+                        <Text size={200} style={{ color: tokens.colorNeutralForeground2 }} truncate block>{p.description}</Text>
                       )}
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: 12 }}>{attr.icon}</span>
                         <Text size={100} style={{ color: attr.color }}>{attr.label}</Text>
+                        {p.areaId && areas.find((a) => a.id === p.areaId) && (
+                          <Badge appearance="outline" size="small" style={{ marginLeft: 'auto' }}>
+                            {areas.find((a) => a.id === p.areaId)!.icon} {areas.find((a) => a.id === p.areaId)!.name}
+                          </Badge>
+                        )}
                         {total > 0 && (
                           <Text size={100} style={{ marginLeft: 'auto', color: tokens.colorNeutralForeground2 }}>
                             {done}/{total} tarefas
@@ -209,7 +280,7 @@ export default function ProjectsPage() {
                           📅 {p.endDate}
                         </Text>
                       )}
-                      {/* Mover status */}
+                      <ProgressBar projectId={p.id} attrColor={attr.color} />
                       <Select
                         size="small"
                         value={p.status}
@@ -225,7 +296,6 @@ export default function ProjectsPage() {
           })}
         </div>
       ) : (
-        /* Lista */
         <div className={styles.listGrid}>
           {projects.map((p) => {
             const attr = ATTRIBUTES.find((a) => a.key === p.attribute)!;
@@ -234,24 +304,24 @@ export default function ProjectsPage() {
             return (
               <Card key={p.id} className={styles.projectCard} style={{ borderLeft: `4px solid ${statusColor(p.status)}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Link href={`/projects/${p.id}`} style={{ flex: 1 }}>
+                  <Link href={`/projects/${p.id}`} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 18, flexShrink: 0 }}>{p.icon ?? '📋'}</span>
                     <Text size={300} weight="semibold">{p.name}</Text>
                   </Link>
-                  <Button appearance="subtle" size="small" icon={<DeleteRegular />}
-                    onClick={() => deleteProject(p.id)} />
+                  <ProjectCardActions p={p} />
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <Badge appearance="filled" size="small"
-                    style={{ background: statusColor(p.status), color: '#fff' }}>
+                  <Badge appearance="filled" size="small" style={{ background: statusColor(p.status), color: '#fff' }}>
                     {statusLabel(p.status)}
                   </Badge>
                   <Text size={100} style={{ color: attr.color }}>{attr.icon} {attr.label}</Text>
-                  {total > 0 && (
-                    <Text size={100} style={{ marginLeft: 'auto', color: tokens.colorNeutralForeground2 }}>
-                      {done}/{total} tarefas
-                    </Text>
+                  {p.areaId && areas.find((a) => a.id === p.areaId) && (
+                    <Badge appearance="outline" size="small">
+                      {areas.find((a) => a.id === p.areaId)!.icon} {areas.find((a) => a.id === p.areaId)!.name}
+                    </Badge>
                   )}
                 </div>
+                <ProgressBar projectId={p.id} attrColor={attr.color} />
               </Card>
             );
           })}

@@ -2,15 +2,18 @@
 
 import { useState } from 'react';
 import {
-  Text, Button, Tab, TabList, Card,
+  Text, Button, Tab, TabList,
   Dialog, DialogSurface, DialogTitle, DialogBody, DialogActions,
   Input, Select, makeStyles, tokens,
+  Popover, PopoverTrigger, PopoverSurface,
+  Badge,
 } from '@fluentui/react-components';
 import { AddRegular, DeleteRegular } from '@fluentui/react-icons';
 import { useAppStore } from '@/store/useAppStore';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ATTRIBUTES } from '@/store/constants';
 import { dateISO, addDays, getStartOfWeek } from '@/lib/utils';
-import type { AgendaItemType } from '@/store/types';
+import type { AgendaItemType, Task, Project } from '@/store/types';
 
 const useStyles = makeStyles({
   page: { display: 'flex', flexDirection: 'column', gap: '24px' },
@@ -23,7 +26,7 @@ const useStyles = makeStyles({
   },
   weekGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px' },
   weekDay: {
-    minHeight: '100px', padding: '8px', borderRadius: '8px',
+    minHeight: '120px', padding: '8px', borderRadius: '8px',
     border: `1px solid ${tokens.colorNeutralStroke2}`,
     display: 'flex', flexDirection: 'column', gap: '4px',
   },
@@ -32,6 +35,13 @@ const useStyles = makeStyles({
     fontSize: '11px', padding: '2px 6px', borderRadius: '4px',
     backgroundColor: tokens.colorNeutralBackground3,
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+    cursor: 'pointer',
+  },
+  taskChip: {
+    fontSize: '11px', padding: '2px 6px', borderRadius: '4px',
+    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+    cursor: 'pointer', color: '#fff',
+    borderLeft: '3px solid rgba(0,0,0,0.2)',
   },
 });
 
@@ -39,12 +49,58 @@ const DAYS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const MONTHS_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
+function TaskPopover({ task, project }: { task: Task; project: Project | undefined }) {
+  const attr = project ? ATTRIBUTES.find((a) => a.key === project.attribute) : undefined;
+  const STATUS_LABEL: Record<string, string> = { todo: 'A Fazer', in_progress: 'Em Progresso', done: 'Concluído' };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 200, maxWidth: 260 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 18 }}>{project?.icon ?? '📋'}</span>
+        <Text size={300} weight="semibold">{task.title}</Text>
+      </div>
+      {task.description && (
+        <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>{task.description}</Text>
+      )}
+      {project && (
+        <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+          Projeto: <strong>{project.name}</strong>
+        </Text>
+      )}
+      {attr && (
+        <Badge appearance="filled" size="small" style={{ background: attr.color, color: '#fff', alignSelf: 'flex-start' }}>
+          {attr.icon} {attr.label}
+        </Badge>
+      )}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {task.startDate && <Text size={100} style={{ color: tokens.colorNeutralForeground2 }}>📅 Início: {task.startDate}</Text>}
+        {task.endDate && <Text size={100} style={{ color: tokens.colorNeutralForeground2 }}>🏁 Fim: {task.endDate}</Text>}
+      </div>
+      <Badge appearance="outline" size="small" style={{ alignSelf: 'flex-start' }}>
+        {STATUS_LABEL[task.status]}
+      </Badge>
+    </div>
+  );
+}
+
 export default function AgendaPage() {
   const styles = useStyles();
   const agenda = useAppStore((s) => s.agenda);
+  const projects = useAppStore((s) => s.projects);
+  const tasks = useAppStore((s) => s.tasks);
   const addAgendaItem = useAppStore((s) => s.addAgendaItem);
   const toggleAgendaItem = useAppStore((s) => s.toggleAgendaItem);
   const deleteAgendaItem = useAppStore((s) => s.deleteAgendaItem);
+
+  function dayProjects(day: string) {
+    return projects.filter((p) => p.startDate && p.endDate && p.startDate <= day && p.endDate >= day);
+  }
+  function dayTasks(day: string) {
+    return tasks.filter((t) => t.status !== 'done' && (
+      t.endDate === day ||
+      (t.startDate && t.endDate && t.startDate <= day && t.endDate >= day) ||
+      (t.startDate && !t.endDate && t.startDate === day)
+    ));
+  }
 
   const [view, setView] = useState<'day' | 'week' | 'month'>('day');
   const [open, setOpen] = useState(false);
@@ -66,24 +122,16 @@ export default function AgendaPage() {
 
   const dayItems = agenda.filter((a) => a.date === selectedDate);
 
-  // Semana atual
   const weekStart = getStartOfWeek(new Date());
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const d = addDays(weekStart, i);
-    return dateISO(d);
-  });
+  const weekDays = Array.from({ length: 7 }, (_, i) => dateISO(addDays(weekStart, i)));
 
-  // Mês atual
   const now = new Date();
   const monthYear = { year: now.getFullYear(), month: now.getMonth() };
   const firstDay = new Date(monthYear.year, monthYear.month, 1).getDay();
   const daysInMonth = new Date(monthYear.year, monthYear.month + 1, 0).getDate();
   const monthCells: (string | null)[] = [
     ...Array(firstDay).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, i) => {
-      const d = new Date(monthYear.year, monthYear.month, i + 1);
-      return dateISO(d);
-    }),
+    ...Array.from({ length: daysInMonth }, (_, i) => dateISO(new Date(monthYear.year, monthYear.month, i + 1))),
   ];
 
   return (
@@ -188,11 +236,14 @@ export default function AgendaPage() {
         <div className={styles.weekGrid}>
           {weekDays.map((day, i) => {
             const items = agenda.filter((a) => a.date === day);
+            const wTasks = dayTasks(day);
             const isToday = day === today;
             return (
               <div key={day} className={styles.weekDay}
-                style={{ background: isToday ? `${tokens.colorBrandBackground}10` : undefined,
-                  borderColor: isToday ? tokens.colorBrandBackground : undefined }}>
+                style={{
+                  background: isToday ? `${tokens.colorBrandBackground}10` : undefined,
+                  borderColor: isToday ? tokens.colorBrandBackground : undefined,
+                }}>
                 <Text size={100} weight={isToday ? 'bold' : 'regular'}
                   style={{ color: isToday ? tokens.colorBrandBackground : tokens.colorNeutralForeground2 }}>
                   {DAYS_PT[i]}
@@ -200,6 +251,33 @@ export default function AgendaPage() {
                 <Text size={300} weight={isToday ? 'bold' : 'regular'}>
                   {new Date(day + 'T12:00:00').getDate()}
                 </Text>
+
+                {/* Tasks de projetos */}
+                {wTasks.map((task) => {
+                  const proj = projects.find((p) => p.id === task.projectId);
+                  const attr = proj ? ATTRIBUTES.find((a) => a.key === proj.attribute) : undefined;
+                  const bgColor = attr?.color ?? '#8B6F47';
+                  const isMultiDay = !!(task.startDate && task.endDate && task.startDate !== task.endDate);
+                  return (
+                    <Popover key={task.id} withArrow positioning="below-start">
+                      <PopoverTrigger>
+                        <div
+                          className={styles.taskChip}
+                          style={{ background: bgColor }}
+                          title={task.title}
+                        >
+                          {proj?.icon ?? '📋'} {task.title}
+                          {isMultiDay && ' ↔'}
+                        </div>
+                      </PopoverTrigger>
+                      <PopoverSurface style={{ padding: 12 }}>
+                        <TaskPopover task={task} project={proj} />
+                      </PopoverSurface>
+                    </Popover>
+                  );
+                })}
+
+                {/* Itens da agenda */}
                 {items.map((item) => (
                   <div key={item.id} className={styles.dayEventDot}
                     style={{ textDecoration: item.done ? 'line-through' : 'none' }}>
@@ -243,7 +321,30 @@ export default function AgendaPage() {
                     style={{ color: isToday ? tokens.colorBrandBackground : undefined }}>
                     {new Date(day + 'T12:00:00').getDate()}
                   </Text>
-                  {items.slice(0, 2).map((item) => (
+                  {dayProjects(day).slice(0, 1).map((p) => (
+                    <div key={p.id} style={{
+                      fontSize: 10, padding: '1px 4px', borderRadius: 3, marginTop: 2,
+                      background: '#8B6F47', color: '#fff',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {p.icon ?? '📋'} {p.name}
+                    </div>
+                  ))}
+                  {dayTasks(day).slice(0, 1).map((t) => {
+                    const proj = projects.find((p) => p.id === t.projectId);
+                    const attr = proj ? ATTRIBUTES.find((a) => a.key === proj.attribute) : undefined;
+                    return (
+                      <div key={t.id} style={{
+                        fontSize: 10, padding: '1px 4px', borderRadius: 3, marginTop: 2,
+                        background: attr?.color ?? '#5B8DD9', color: '#fff',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        borderLeft: '3px solid rgba(0,0,0,0.2)',
+                      }}>
+                        {proj?.icon ?? '✓'} {t.title}
+                      </div>
+                    );
+                  })}
+                  {items.slice(0, 1).map((item) => (
                     <div key={item.id} style={{
                       fontSize: 10, padding: '1px 4px', borderRadius: 3, marginTop: 2,
                       background: tokens.colorBrandBackground, color: '#fff',
@@ -252,8 +353,10 @@ export default function AgendaPage() {
                       {item.title}
                     </div>
                   ))}
-                  {items.length > 2 && (
-                    <Text size={100} style={{ color: tokens.colorNeutralForeground2 }}>+{items.length - 2}</Text>
+                  {(items.length + dayProjects(day).length + dayTasks(day).length) > 3 && (
+                    <Text size={100} style={{ color: tokens.colorNeutralForeground2 }}>
+                      +{items.length + dayProjects(day).length + dayTasks(day).length - 3}
+                    </Text>
                   )}
                 </div>
               );
