@@ -98,6 +98,8 @@ const initialState: AppState = {
   finances: [],
   waterToday: 0,
   xpGainedToday: 0,
+  xpEvents: [],
+  xpHistory: [],
   darkMode: false,
   sidebarCollapsed: false,
 };
