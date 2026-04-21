@@ -5,26 +5,59 @@ import { persist } from 'zustand/middleware';
 import type {
   AppState, User, Habit, Project, Task, Area, Resource, Archive,
   AgendaItem, Workout, Meal, Transaction, AttributeKey,
-  ProjectStatus, TaskStatus, TodoItem,
+  ProjectStatus, TaskStatus, TodoItem, XPEvent, XPNotification,
 } from './types';
 import { INITIAL_ATTR_XP } from './constants';
 import { calcTotalXp, getLevelFromXp } from '@/lib/xp';
 import { generateId, dateISO } from '@/lib/utils';
+import { XP_REWARDS, streakBonus } from '@/lib/xp-rewards';
+import type { XpGrant } from '@/lib/xp-rewards';
+
+// Applies XP grants to state, returns the state delta
+function applyXp(s: AppState, grants: XpGrant[]): Partial<AppState> {
+  const active = grants.filter((g) => g.amount !== 0);
+  if (active.length === 0) return {};
+
+  let attrXp = { ...s.attrXp };
+  let xpGainedToday = s.xpGainedToday;
+  const notifications: XPNotification[] = [];
+  const events: XPEvent[] = [];
+
+  for (const { attr, amount, reason } of active) {
+    attrXp = { ...attrXp, [attr]: Math.max(0, (attrXp[attr] ?? 0) + amount) };
+    xpGainedToday = Math.max(0, xpGainedToday + amount);
+    const id = generateId();
+    notifications.push({ id, attr, amount, reason });
+    events.push({ id, date: dateISO(), attr, amount, reason, timestamp: Date.now() });
+  }
+
+  const oldLevel = getLevelFromXp(calcTotalXp(s.attrXp)).level;
+  const totalXp = calcTotalXp(attrXp);
+  const { level: newLevel } = getLevelFromXp(totalXp);
+  if (newLevel > oldLevel && notifications.length > 0) {
+    notifications[notifications.length - 1].levelUp = true;
+  }
+  const user = s.user ? { ...s.user, totalXp, level: newLevel } : null;
+
+  return {
+    attrXp,
+    user,
+    xpGainedToday,
+    xpNotifications: [...s.xpNotifications, ...notifications],
+    xpEvents: [...s.xpEvents, ...events],
+    xpHistory: [...s.xpHistory, ...events],
+  };
+}
 
 interface AppActions {
-  // Usuário
   setUser: (user: User) => void;
   updateUser: (partial: Partial<User>) => void;
-
-  // XP
   addAttrXp: (attr: AttributeKey, amount: number) => void;
 
-  // Hábitos
   addHabit: (habit: Omit<Habit, 'id' | 'streak' | 'logs' | 'createdAt'>) => void;
   toggleHabitToday: (id: string) => void;
   deleteHabit: (id: string) => void;
 
-  // Projetos
   addProject: (project: Omit<Project, 'id' | 'todos' | 'createdAt'>) => void;
   updateProject: (id: string, partial: Partial<Project>) => void;
   deleteProject: (id: string) => void;
@@ -33,54 +66,46 @@ interface AppActions {
   toggleTodo: (projectId: string, todoId: string) => void;
   deleteTodo: (projectId: string, todoId: string) => void;
 
-  // Tasks
   addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
   updateTask: (id: string, partial: Partial<Task>) => void;
   deleteTask: (id: string) => void;
   moveTaskStatus: (id: string, status: TaskStatus) => void;
   updateProjectIcon: (id: string, icon: string) => void;
 
-  // Áreas
   addArea: (area: Omit<Area, 'id'>) => void;
   updateArea: (id: string, partial: Partial<Area>) => void;
   deleteArea: (id: string) => void;
 
-  // Resources
   addResource: (resource: Omit<Resource, 'id' | 'createdAt'>) => void;
   updateResource: (id: string, partial: Partial<Resource>) => void;
   deleteResource: (id: string) => void;
 
-  // Archives
   archiveProject: (id: string) => void;
   archiveArea: (id: string) => void;
   archiveResource: (id: string) => void;
   restoreFromArchive: (id: string) => void;
   deleteFromArchive: (id: string) => void;
 
-  // Agenda
   addAgendaItem: (item: Omit<AgendaItem, 'id'>) => void;
+  updateAgendaItem: (id: string, partial: Partial<AgendaItem>) => void;
   toggleAgendaItem: (id: string) => void;
   deleteAgendaItem: (id: string) => void;
 
-  // Finanças
   addTransaction: (t: Omit<Transaction, 'id'>) => void;
   deleteTransaction: (id: string) => void;
 
-  // Workout
   addWorkout: (w: Omit<Workout, 'id'>) => void;
   deleteWorkout: (id: string) => void;
 
-  // Refeições
   addMeal: (m: Omit<Meal, 'id'>) => void;
   deleteMeal: (id: string) => void;
 
-  // UI
   toggleDarkMode: () => void;
   toggleSidebar: () => void;
   setSidebarCollapsed: (v: boolean) => void;
-
-  // Água
   setWaterToday: (ml: number) => void;
+
+  dismissXpNotification: (id: string) => void;
 }
 
 const initialState: AppState = {
@@ -100,13 +125,14 @@ const initialState: AppState = {
   xpGainedToday: 0,
   xpEvents: [],
   xpHistory: [],
+  xpNotifications: [],
   darkMode: false,
   sidebarCollapsed: false,
 };
 
 export const useAppStore = create<AppState & AppActions>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       ...initialState,
 
       setUser: (user) => set({ user }),
@@ -115,61 +141,69 @@ export const useAppStore = create<AppState & AppActions>()(
         set((s) => ({ user: s.user ? { ...s.user, ...partial } : null })),
 
       addAttrXp: (attr, amount) =>
-        set((s) => {
-          const attrXp = { ...s.attrXp, [attr]: (s.attrXp[attr] ?? 0) + amount };
-          const totalXp = calcTotalXp(attrXp);
-          const { level } = getLevelFromXp(totalXp);
-          const user = s.user ? { ...s.user, totalXp, level } : null;
-          return { attrXp, user, xpGainedToday: s.xpGainedToday + amount };
-        }),
+        set((s) => applyXp(s, [{ attr, amount, reason: 'XP manual' }])),
+
+      // ── Hábitos ───────────────────────────────────────────────────────────
 
       addHabit: (habit) =>
         set((s) => ({
-          habits: [
-            ...s.habits,
-            { ...habit, id: generateId(), streak: 0, logs: [], createdAt: dateISO() },
-          ],
+          habits: [...s.habits, { ...habit, id: generateId(), streak: 0, logs: [], createdAt: dateISO() }],
         })),
 
       toggleHabitToday: (id) =>
         set((s) => {
           const today = dateISO();
-          return {
-            habits: s.habits.map((h) => {
-              if (h.id !== id) return h;
-              const existing = h.logs.find((l) => l.date === today);
-              const wasDone = existing?.done ?? false;
-              const logs = existing
-                ? h.logs.map((l) => l.date === today ? { ...l, done: !l.done } : l)
-                : [...h.logs, { date: today, done: true }];
-              const streak = !wasDone ? h.streak + 1 : Math.max(0, h.streak - 1);
-              return { ...h, logs, streak };
-            }),
-          };
+          const habit = s.habits.find((h) => h.id === id);
+          if (!habit) return s;
+          const existing = habit.logs.find((l) => l.date === today);
+          const wasDone = existing?.done ?? false;
+          const logs = existing
+            ? habit.logs.map((l) => l.date === today ? { ...l, done: !l.done } : l)
+            : [...habit.logs, { date: today, done: true }];
+          const newStreak = !wasDone ? habit.streak + 1 : Math.max(0, habit.streak - 1);
+          const newHabits = s.habits.map((h) => h.id === id ? { ...h, logs, streak: newStreak } : h);
+          const grants: XpGrant[] = [];
+          if (!wasDone) {
+            grants.push({ attr: habit.attribute, amount: XP_REWARDS.HABIT_COMPLETE, reason: `Hábito: ${habit.name}` });
+            const bonus = streakBonus(newStreak, habit.attribute);
+            if (bonus) grants.push(bonus);
+          } else {
+            grants.push({ attr: habit.attribute, amount: XP_REWARDS.HABIT_LOSE_STREAK, reason: `Hábito desmarcado: ${habit.name}` });
+          }
+          return { habits: newHabits, ...applyXp(s, grants) };
         }),
 
       deleteHabit: (id) => set((s) => ({ habits: s.habits.filter((h) => h.id !== id) })),
 
+      // ── Projetos ──────────────────────────────────────────────────────────
+
       addProject: (project) =>
-        set((s) => ({
-          projects: [
-            ...s.projects,
-            { ...project, id: generateId(), todos: [], createdAt: dateISO() },
-          ],
-        })),
+        set((s) => {
+          const newProject: Project = { ...project, id: generateId(), todos: [], createdAt: dateISO() };
+          return {
+            projects: [...s.projects, newProject],
+            ...applyXp(s, [{ attr: 'disciplina', amount: XP_REWARDS.PROJECT_CREATE, reason: `Projeto criado: ${project.name}` }]),
+          };
+        }),
 
       updateProject: (id, partial) =>
-        set((s) => ({
-          projects: s.projects.map((p) => (p.id === id ? { ...p, ...partial } : p)),
-        })),
+        set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...partial } : p)) })),
 
       deleteProject: (id) =>
         set((s) => ({ projects: s.projects.filter((p) => p.id !== id) })),
 
       updateProjectStatus: (id, status) =>
-        set((s) => ({
-          projects: s.projects.map((p) => (p.id === id ? { ...p, status } : p)),
-        })),
+        set((s) => {
+          const project = s.projects.find((p) => p.id === id);
+          if (!project) return s;
+          const newProjects = s.projects.map((p) => (p.id === id ? { ...p, status } : p));
+          const grants: XpGrant[] = [];
+          if (status === 'in-progress' && project.status !== 'in-progress')
+            grants.push({ attr: 'foco', amount: XP_REWARDS.PROJECT_START, reason: `Projeto iniciado: ${project.name}` });
+          if (status === 'done' && project.status !== 'done')
+            grants.push({ attr: project.attribute, amount: XP_REWARDS.PROJECT_DONE, reason: `Projeto concluído: ${project.name}` });
+          return { projects: newProjects, ...applyXp(s, grants) };
+        }),
 
       addTodo: (projectId, text) =>
         set((s) => ({
@@ -184,10 +218,7 @@ export const useAppStore = create<AppState & AppActions>()(
         set((s) => ({
           projects: s.projects.map((p) => {
             if (p.id !== projectId) return p;
-            return {
-              ...p,
-              todos: p.todos.map((t) => (t.id === todoId ? { ...t, done: !t.done } : t)),
-            };
+            return { ...p, todos: p.todos.map((t) => (t.id === todoId ? { ...t, done: !t.done } : t)) };
           }),
         })),
 
@@ -199,10 +230,10 @@ export const useAppStore = create<AppState & AppActions>()(
           }),
         })),
 
+      // ── Tasks ─────────────────────────────────────────────────────────────
+
       addTask: (task) =>
-        set((s) => ({
-          tasks: [...s.tasks, { ...task, id: generateId(), createdAt: dateISO() }],
-        })),
+        set((s) => ({ tasks: [...s.tasks, { ...task, id: generateId(), createdAt: dateISO() }] })),
 
       updateTask: (id, partial) =>
         set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, ...partial } : t)) })),
@@ -216,26 +247,36 @@ export const useAppStore = create<AppState & AppActions>()(
           if (!task) return s;
           const wasDone = task.status === 'done';
           const newTasks = s.tasks.map((t) => (t.id === id ? { ...t, status } : t));
+          const grants: XpGrant[] = [];
           if (status === 'done' && !wasDone) {
             const project = s.projects.find((p) => p.id === task.projectId);
             if (project) {
-              const attrXp = { ...s.attrXp, [project.attribute]: (s.attrXp[project.attribute] ?? 0) + 15 };
-              const totalXp = calcTotalXp(attrXp);
-              const { level } = getLevelFromXp(totalXp);
-              const user = s.user ? { ...s.user, totalXp, level } : null;
-              return { tasks: newTasks, attrXp, user, xpGainedToday: s.xpGainedToday + 15 };
+              const today = dateISO();
+              const onTime = !task.endDate || task.endDate >= today;
+              grants.push({
+                attr: project.attribute,
+                amount: onTime ? XP_REWARDS.PROJECT_TASK_ON_TIME : XP_REWARDS.PROJECT_TASK_COMPLETE,
+                reason: onTime ? `Task no prazo: ${task.title}` : `Task concluída: ${task.title}`,
+              });
+              const projectTasks = newTasks.filter((t) => t.projectId === project.id);
+              if (projectTasks.length > 0 && projectTasks.every((t) => t.status === 'done')) {
+                grants.push({ attr: project.attribute, amount: XP_REWARDS.PROJECT_ALL_TASKS_DONE, reason: `100% das tasks: ${project.name}!` });
+              }
             }
           }
-          return { tasks: newTasks };
+          return { tasks: newTasks, ...applyXp(s, grants) };
         }),
 
       updateProjectIcon: (id, icon) =>
-        set((s) => ({
-          projects: s.projects.map((p) => (p.id === id ? { ...p, icon } : p)),
-        })),
+        set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, icon } : p)) })),
+
+      // ── Áreas ─────────────────────────────────────────────────────────────
 
       addArea: (area) =>
-        set((s) => ({ areas: [...s.areas, { ...area, id: generateId() }] })),
+        set((s) => ({
+          areas: [...s.areas, { ...area, id: generateId() }],
+          ...applyXp(s, [{ attr: 'disciplina', amount: XP_REWARDS.AREA_CREATE, reason: `Área criada: ${area.name}` }]),
+        })),
 
       updateArea: (id, partial) =>
         set((s) => ({ areas: s.areas.map((a) => (a.id === id ? { ...a, ...partial } : a)) })),
@@ -243,50 +284,74 @@ export const useAppStore = create<AppState & AppActions>()(
       deleteArea: (id) =>
         set((s) => ({ areas: s.areas.filter((a) => a.id !== id) })),
 
+      // ── Resources ─────────────────────────────────────────────────────────
+
       addResource: (resource) =>
-        set((s) => ({
-          resources: [...s.resources, { ...resource, id: generateId(), createdAt: dateISO() }],
-        })),
+        set((s) => {
+          const grants: XpGrant[] = [
+            { attr: 'sabedoria', amount: XP_REWARDS.RESOURCE_CREATE, reason: `Resource: ${resource.name}` },
+          ];
+          if (resource.projectIds?.length > 0)
+            grants.push({ attr: 'inteligencia', amount: XP_REWARDS.RESOURCE_LINK_PROJECT, reason: 'Resource vinculado a projeto' });
+          return {
+            resources: [...s.resources, { ...resource, id: generateId(), createdAt: dateISO() }],
+            ...applyXp(s, grants),
+          };
+        }),
 
       updateResource: (id, partial) =>
-        set((s) => ({
-          resources: s.resources.map((r) => (r.id === id ? { ...r, ...partial } : r)),
-        })),
+        set((s) => {
+          const existing = s.resources.find((r) => r.id === id);
+          const grants: XpGrant[] = [];
+          if (existing && partial.projectIds && partial.projectIds.length > existing.projectIds.length)
+            grants.push({ attr: 'inteligencia', amount: XP_REWARDS.RESOURCE_LINK_PROJECT, reason: 'Resource vinculado a projeto' });
+          return {
+            resources: s.resources.map((r) => (r.id === id ? { ...r, ...partial } : r)),
+            ...applyXp(s, grants),
+          };
+        }),
 
       deleteResource: (id) =>
         set((s) => ({ resources: s.resources.filter((r) => r.id !== id) })),
+
+      // ── Arquivo ───────────────────────────────────────────────────────────
 
       archiveProject: (id) =>
         set((s) => {
           const item = s.projects.find((p) => p.id === id);
           if (!item) return s;
-          const archive: Archive = {
-            id: generateId(), name: item.name,
-            originalType: 'project', originalData: item, archivedAt: dateISO(),
+          const archive: Archive = { id: generateId(), name: item.name, originalType: 'project', originalData: item, archivedAt: dateISO() };
+          return {
+            projects: s.projects.filter((p) => p.id !== id),
+            archives: [...s.archives, archive],
+            ...applyXp(s, [
+              { attr: 'sabedoria', amount: XP_REWARDS.PROJECT_ARCHIVE, reason: `Projeto arquivado: ${item.name}` },
+            ]),
           };
-          return { projects: s.projects.filter((p) => p.id !== id), archives: [...s.archives, archive] };
         }),
 
       archiveArea: (id) =>
         set((s) => {
           const item = s.areas.find((a) => a.id === id);
           if (!item) return s;
-          const archive: Archive = {
-            id: generateId(), name: item.name,
-            originalType: 'area', originalData: item, archivedAt: dateISO(),
+          const archive: Archive = { id: generateId(), name: item.name, originalType: 'area', originalData: item, archivedAt: dateISO() };
+          return {
+            areas: s.areas.filter((a) => a.id !== id),
+            archives: [...s.archives, archive],
+            ...applyXp(s, [{ attr: 'sabedoria', amount: XP_REWARDS.ARCHIVE_ITEM, reason: `Área arquivada: ${item.name}` }]),
           };
-          return { areas: s.areas.filter((a) => a.id !== id), archives: [...s.archives, archive] };
         }),
 
       archiveResource: (id) =>
         set((s) => {
           const item = s.resources.find((r) => r.id === id);
           if (!item) return s;
-          const archive: Archive = {
-            id: generateId(), name: item.name,
-            originalType: 'resource', originalData: item, archivedAt: dateISO(),
+          const archive: Archive = { id: generateId(), name: item.name, originalType: 'resource', originalData: item, archivedAt: dateISO() };
+          return {
+            resources: s.resources.filter((r) => r.id !== id),
+            archives: [...s.archives, archive],
+            ...applyXp(s, [{ attr: 'sabedoria', amount: XP_REWARDS.ARCHIVE_ITEM, reason: `Resource arquivado: ${item.name}` }]),
           };
-          return { resources: s.resources.filter((r) => r.id !== id), archives: [...s.archives, archive] };
         }),
 
       restoreFromArchive: (id) =>
@@ -294,55 +359,110 @@ export const useAppStore = create<AppState & AppActions>()(
           const entry = s.archives.find((a) => a.id === id);
           if (!entry) return s;
           const base = { archives: s.archives.filter((a) => a.id !== id) };
-          if (entry.originalType === 'project')
-            return { ...base, projects: [...s.projects, entry.originalData as Project] };
-          if (entry.originalType === 'area')
-            return { ...base, areas: [...s.areas, entry.originalData as Area] };
+          if (entry.originalType === 'project') return { ...base, projects: [...s.projects, entry.originalData as Project] };
+          if (entry.originalType === 'area') return { ...base, areas: [...s.areas, entry.originalData as Area] };
           return { ...base, resources: [...s.resources, entry.originalData as Resource] };
         }),
 
       deleteFromArchive: (id) =>
         set((s) => ({ archives: s.archives.filter((a) => a.id !== id) })),
 
+      // ── Agenda ────────────────────────────────────────────────────────────
+
       addAgendaItem: (item) =>
         set((s) => ({ agenda: [...s.agenda, { ...item, id: generateId() }] })),
 
+      updateAgendaItem: (id, partial) =>
+        set((s) => ({ agenda: s.agenda.map((a) => (a.id === id ? { ...a, ...partial } : a)) })),
+
       toggleAgendaItem: (id) =>
-        set((s) => ({
-          agenda: s.agenda.map((a) => (a.id === id ? { ...a, done: !a.done } : a)),
-        })),
+        set((s) => {
+          const item = s.agenda.find((a) => a.id === id);
+          if (!item) return s;
+          const newAgenda = s.agenda.map((a) => (a.id === id ? { ...a, done: !a.done } : a));
+          const grants: XpGrant[] = [];
+          if (!item.done && item.type === 'task') {
+            const today = dateISO();
+            const onTime = item.date >= today;
+            const attrKey: AttributeKey = item.attribute
+              ?? s.projects.find((p) => p.id === item.projectId)?.attribute
+              ?? 'disciplina';
+            grants.push({
+              attr: attrKey,
+              amount: onTime ? XP_REWARDS.AGENDA_TASK_ON_TIME : XP_REWARDS.AGENDA_TASK_LATE,
+              reason: onTime ? `Tarefa concluída: ${item.title}` : `Tarefa atrasada: ${item.title}`,
+            });
+            // Daily clear bonus
+            const todayTasks = newAgenda.filter((a) => a.date === today && a.type === 'task');
+            if (todayTasks.length > 0 && todayTasks.every((a) => a.done)) {
+              grants.push({ attr: 'disciplina', amount: XP_REWARDS.AGENDA_DAILY_CLEAR, reason: 'Daily clear! Todas as tarefas do dia!' });
+            }
+          }
+          return { agenda: newAgenda, ...applyXp(s, grants) };
+        }),
 
       deleteAgendaItem: (id) =>
         set((s) => ({ agenda: s.agenda.filter((a) => a.id !== id) })),
 
+      // ── Finanças ──────────────────────────────────────────────────────────
+
       addTransaction: (t) =>
-        set((s) => ({ finances: [...s.finances, { ...t, id: generateId() }] })),
+        set((s) => ({
+          finances: [...s.finances, { ...t, id: generateId() }],
+          ...applyXp(s, [{ attr: 'disciplina', amount: XP_REWARDS.TRANSACTION_LOG, reason: 'Transação registrada' }]),
+        })),
 
       deleteTransaction: (id) =>
         set((s) => ({ finances: s.finances.filter((f) => f.id !== id) })),
 
+      // ── Workout ───────────────────────────────────────────────────────────
+
       addWorkout: (w) =>
-        set((s) => ({ workouts: [...s.workouts, { ...w, id: generateId() }] })),
+        set((s) => ({
+          workouts: [...s.workouts, { ...w, id: generateId() }],
+          ...applyXp(s, [{ attr: 'forca', amount: XP_REWARDS.WORKOUT_LOG, reason: `Treino: ${w.name}` }]),
+        })),
 
       deleteWorkout: (id) =>
         set((s) => ({ workouts: s.workouts.filter((w) => w.id !== id) })),
 
+      // ── Refeições ─────────────────────────────────────────────────────────
+
       addMeal: (m) =>
-        set((s) => ({ meals: [...s.meals, { ...m, id: generateId() }] })),
+        set((s) => {
+          const newMeals = [...s.meals, { ...m, id: generateId() }];
+          const grants: XpGrant[] = [{ attr: 'vitalidade', amount: XP_REWARDS.MEAL_LOG, reason: 'Refeição registrada' }];
+          const todayMeals = newMeals.filter((meal) => meal.date === dateISO());
+          if (todayMeals.length === 3)
+            grants.push({ attr: 'disciplina', amount: XP_REWARDS.THREE_MEALS_DAY, reason: '3 refeições hoje!' });
+          return { meals: newMeals, ...applyXp(s, grants) };
+        }),
 
       deleteMeal: (id) =>
         set((s) => ({ meals: s.meals.filter((m) => m.id !== id) })),
 
+      // ── UI ────────────────────────────────────────────────────────────────
+
       toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
-
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
-
       setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
 
-      setWaterToday: (ml) => set({ waterToday: ml }),
+      setWaterToday: (ml) =>
+        set((s) => {
+          const grants: XpGrant[] = [];
+          if (s.waterToday < 2000 && ml >= 2000)
+            grants.push({ attr: 'vitalidade', amount: XP_REWARDS.WATER_GOAL, reason: 'Meta de hidratação atingida!' });
+          return { waterToday: ml, ...applyXp(s, grants) };
+        }),
+
+      dismissXpNotification: (id) =>
+        set((s) => ({ xpNotifications: s.xpNotifications.filter((n) => n.id !== id) })),
     }),
     {
       name: 'evoquest-v2-store',
+      onRehydrateStorage: () => (state) => {
+        if (state) state.xpNotifications = [];
+      },
     }
   )
 );

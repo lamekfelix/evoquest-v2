@@ -91,6 +91,7 @@ export default function DashboardPage() {
   const tasks = useAppStore((s) => s.tasks);
   const agenda = useAppStore((s) => s.agenda);
   const waterToday = useAppStore((s) => s.waterToday);
+  const xpGainedToday = useAppStore((s) => s.xpGainedToday);
   const setWaterToday = useAppStore((s) => s.setWaterToday);
   const setUser = useAppStore((s) => s.setUser);
   const toggleHabitToday = useAppStore((s) => s.toggleHabitToday);
@@ -318,6 +319,13 @@ export default function DashboardPage() {
         <div className={styles.col}>
 
           {/* Stat cards */}
+          <StatCard
+            icon={<span>⚡</span>}
+            label="XP ganho hoje"
+            value={xpGainedToday}
+            sub="pontos de experiência"
+            color="#F4A261"
+          />
           <StatCard
             icon={<TaskListSquareLtrRegular />}
             label="Projetos ativos"

@@ -94,8 +94,10 @@ export interface AgendaItem {
   startTime?: string;
   endTime?: string;
   done: boolean;
+  icon?: string;
   attribute?: AttributeKey;
   projectId?: string;
+  areaId?: string;
 }
 
 export interface Area {
@@ -183,6 +185,14 @@ export interface XPEvent {
   levelUp?: boolean;
 }
 
+export interface XPNotification {
+  id: string;
+  attr: AttributeKey;
+  amount: number;
+  reason: string;
+  levelUp?: boolean;
+}
+
 export interface AppState {
   user: User | null;
   attrXp: Record<AttributeKey, number>;
@@ -200,6 +210,7 @@ export interface AppState {
   xpGainedToday: number;
   xpEvents: XPEvent[];
   xpHistory: XPEvent[];
+  xpNotifications: XPNotification[];
   darkMode: boolean;
   sidebarCollapsed: boolean;
 }

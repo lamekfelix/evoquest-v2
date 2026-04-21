@@ -5,6 +5,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { evoquestLightTheme, evoquestDarkTheme } from '@/lib/theme';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { XPToastListener } from '@/components/shared/XPToastListener';
 
 interface FluentShellProps {
   children: React.ReactNode;
@@ -18,6 +19,7 @@ export function FluentShell({ children }: FluentShellProps) {
   return (
     <SSRProvider>
     <FluentProvider theme={darkMode ? evoquestDarkTheme : evoquestLightTheme} className="h-full">
+      <XPToastListener />
       <div className="flex h-full min-h-screen">
         <Sidebar />
         <div

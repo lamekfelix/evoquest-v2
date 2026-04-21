@@ -2,35 +2,28 @@
 
 import { useState } from 'react';
 import {
-  Text, Button, Tab, TabList,
-  Dialog, DialogSurface, DialogTitle, DialogBody, DialogActions,
-  Input, Select, makeStyles, tokens,
+  Text, Button, Tab, TabList, Input,
   Popover, PopoverTrigger, PopoverSurface,
-  Badge,
+  Badge, makeStyles, tokens,
 } from '@fluentui/react-components';
-import { AddRegular, DeleteRegular } from '@fluentui/react-icons';
+import { AddRegular } from '@fluentui/react-icons';
 import { useAppStore } from '@/store/useAppStore';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ATTRIBUTES } from '@/store/constants';
 import { dateISO, addDays, getStartOfWeek } from '@/lib/utils';
-import type { AgendaItemType, Task, Project } from '@/store/types';
+import type { Task, Project, AgendaItem } from '@/store/types';
+import { AgendaItemDialog } from '@/components/agenda/AgendaItemDialog';
+import { AgendaCard } from '@/components/agenda/AgendaCard';
 
 const useStyles = makeStyles({
   page: { display: 'flex', flexDirection: 'column', gap: '24px' },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
-  taskItem: {
-    display: 'flex', alignItems: 'center', gap: '10px',
-    padding: '10px 14px', borderRadius: '8px',
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    backgroundColor: tokens.colorNeutralBackground1,
-  },
   weekGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px' },
   weekDay: {
     minHeight: '120px', padding: '8px', borderRadius: '8px',
     border: `1px solid ${tokens.colorNeutralStroke2}`,
     display: 'flex', flexDirection: 'column', gap: '4px',
   },
-  formField: { display: 'flex', flexDirection: 'column', gap: '4px' },
   dayEventDot: {
     fontSize: '11px', padding: '2px 6px', borderRadius: '4px',
     backgroundColor: tokens.colorNeutralBackground3,
@@ -86,10 +79,19 @@ export default function AgendaPage() {
   const styles = useStyles();
   const agenda = useAppStore((s) => s.agenda);
   const projects = useAppStore((s) => s.projects);
+  const areas = useAppStore((s) => s.areas);
   const tasks = useAppStore((s) => s.tasks);
   const addAgendaItem = useAppStore((s) => s.addAgendaItem);
+  const updateAgendaItem = useAppStore((s) => s.updateAgendaItem);
   const toggleAgendaItem = useAppStore((s) => s.toggleAgendaItem);
   const deleteAgendaItem = useAppStore((s) => s.deleteAgendaItem);
+
+  const [view, setView] = useState<'day' | 'week' | 'month'>('day');
+  const [selectedDate, setSelectedDate] = useState(dateISO());
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editItem, setEditItem] = useState<AgendaItem | null>(null);
+
+  const today = dateISO();
 
   function dayProjects(day: string) {
     return projects.filter((p) => p.startDate && p.endDate && p.startDate <= day && p.endDate >= day);
@@ -100,24 +102,6 @@ export default function AgendaPage() {
       (t.startDate && t.endDate && t.startDate <= day && t.endDate >= day) ||
       (t.startDate && !t.endDate && t.startDate === day)
     ));
-  }
-
-  const [view, setView] = useState<'day' | 'week' | 'month'>('day');
-  const [open, setOpen] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(dateISO());
-  const [title, setTitle] = useState('');
-  const [type, setType] = useState<AgendaItemType>('task');
-  const [date, setDate] = useState(dateISO());
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
-
-  const today = dateISO();
-
-  function handleAdd() {
-    if (!title.trim()) return;
-    addAgendaItem({ title: title.trim(), type, date, startTime: startTime || undefined, endTime: endTime || undefined, done: false });
-    setTitle(''); setStartTime(''); setEndTime('');
-    setOpen(false);
   }
 
   const dayItems = agenda.filter((a) => a.date === selectedDate);
@@ -134,6 +118,8 @@ export default function AgendaPage() {
     ...Array.from({ length: daysInMonth }, (_, i) => dateISO(new Date(monthYear.year, monthYear.month, i + 1))),
   ];
 
+  const DEFAULT_ICONS: Record<string, string> = { task: '📝', event: '📅', reminder: '🔔' };
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
@@ -149,52 +135,32 @@ export default function AgendaPage() {
             <Tab value="week">Semanal</Tab>
             <Tab value="month">Mensal</Tab>
           </TabList>
-          <Button appearance="primary" icon={<AddRegular />} onClick={() => setOpen(true)}>
+          <Button appearance="primary" icon={<AddRegular />} onClick={() => setCreateOpen(true)}>
             Novo Item
           </Button>
         </div>
       </div>
 
-      {/* Dialog */}
-      <Dialog open={open} onOpenChange={(_, d) => setOpen(d.open)}>
-        <DialogSurface>
-          <DialogTitle>Novo Item na Agenda</DialogTitle>
-          <DialogBody>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div className={styles.formField}>
-                <Text size={200}>Título *</Text>
-                <Input placeholder="Nome do evento/tarefa" value={title} onChange={(_, d) => setTitle(d.value)} />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div className={styles.formField}>
-                  <Text size={200}>Tipo</Text>
-                  <Select value={type} onChange={(_, d) => setType(d.value as AgendaItemType)}>
-                    <option value="task">Tarefa</option>
-                    <option value="event">Evento</option>
-                    <option value="reminder">Lembrete</option>
-                  </Select>
-                </div>
-                <div className={styles.formField}>
-                  <Text size={200}>Data</Text>
-                  <Input type="date" value={date} onChange={(_, d) => setDate(d.value)} />
-                </div>
-                <div className={styles.formField}>
-                  <Text size={200}>Início</Text>
-                  <Input type="time" value={startTime} onChange={(_, d) => setStartTime(d.value)} />
-                </div>
-                <div className={styles.formField}>
-                  <Text size={200}>Fim</Text>
-                  <Input type="time" value={endTime} onChange={(_, d) => setEndTime(d.value)} />
-                </div>
-              </div>
-            </div>
-          </DialogBody>
-          <DialogActions>
-            <Button appearance="secondary" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button appearance="primary" onClick={handleAdd} disabled={!title.trim()}>Adicionar</Button>
-          </DialogActions>
-        </DialogSurface>
-      </Dialog>
+      {/* Dialog criar */}
+      <AgendaItemDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onSave={(data) => addAgendaItem({ ...data, done: false })}
+        projects={projects}
+        areas={areas}
+        defaultDate={selectedDate}
+      />
+
+      {/* Dialog editar */}
+      <AgendaItemDialog
+        open={!!editItem}
+        onClose={() => setEditItem(null)}
+        item={editItem}
+        onSave={(data) => { if (editItem) updateAgendaItem(editItem.id, data); }}
+        onDelete={() => { if (editItem) { deleteAgendaItem(editItem.id); setEditItem(null); } }}
+        projects={projects}
+        areas={areas}
+      />
 
       {/* Vista Diária */}
       {view === 'day' && (
@@ -205,27 +171,15 @@ export default function AgendaPage() {
             <EmptyState icon="📅" title="Nenhum item neste dia" description="Adicione tarefas ou eventos para esse dia." />
           ) : (
             dayItems.map((item) => (
-              <div key={item.id} className={styles.taskItem} style={{ opacity: item.done ? 0.65 : 1 }}>
-                <button
-                  onClick={() => toggleAgendaItem(item.id)}
-                  style={{
-                    width: 20, height: 20, borderRadius: item.type === 'task' ? 4 : '50%',
-                    border: `2px solid ${tokens.colorBrandBackground}`,
-                    background: item.done ? tokens.colorBrandBackground : 'transparent',
-                    cursor: 'pointer', flexShrink: 0,
-                  }}
-                />
-                <Text size={300} style={{ flex: 1, textDecoration: item.done ? 'line-through' : 'none' }}>
-                  {item.title}
-                </Text>
-                {item.startTime && (
-                  <Text size={100} style={{ color: tokens.colorNeutralForeground2 }}>
-                    {item.startTime}{item.endTime ? ` – ${item.endTime}` : ''}
-                  </Text>
-                )}
-                <Button appearance="subtle" size="small" icon={<DeleteRegular />}
-                  onClick={() => deleteAgendaItem(item.id)} />
-              </div>
+              <AgendaCard
+                key={item.id}
+                item={item}
+                project={item.projectId ? projects.find((p) => p.id === item.projectId) : undefined}
+                area={item.areaId ? areas.find((a) => a.id === item.areaId) : undefined}
+                onToggle={() => toggleAgendaItem(item.id)}
+                onEdit={() => setEditItem(item)}
+                onDelete={() => deleteAgendaItem(item.id)}
+              />
             ))
           )}
         </div>
@@ -252,7 +206,6 @@ export default function AgendaPage() {
                   {new Date(day + 'T12:00:00').getDate()}
                 </Text>
 
-                {/* Tasks de projetos */}
                 {wTasks.map((task) => {
                   const proj = projects.find((p) => p.id === task.projectId);
                   const attr = proj ? ATTRIBUTES.find((a) => a.key === proj.attribute) : undefined;
@@ -261,13 +214,8 @@ export default function AgendaPage() {
                   return (
                     <Popover key={task.id} withArrow positioning="below-start">
                       <PopoverTrigger>
-                        <div
-                          className={styles.taskChip}
-                          style={{ background: bgColor }}
-                          title={task.title}
-                        >
-                          {proj?.icon ?? '📋'} {task.title}
-                          {isMultiDay && ' ↔'}
+                        <div className={styles.taskChip} style={{ background: bgColor }} title={task.title}>
+                          {proj?.icon ?? '📋'} {task.title}{isMultiDay && ' ↔'}
                         </div>
                       </PopoverTrigger>
                       <PopoverSurface style={{ padding: 12 }}>
@@ -277,13 +225,24 @@ export default function AgendaPage() {
                   );
                 })}
 
-                {/* Itens da agenda */}
-                {items.map((item) => (
-                  <div key={item.id} className={styles.dayEventDot}
-                    style={{ textDecoration: item.done ? 'line-through' : 'none' }}>
-                    {item.title}
-                  </div>
-                ))}
+                {items.map((item) => {
+                  const icon = item.icon || DEFAULT_ICONS[item.type] || '📅';
+                  const areaColor = item.areaId ? areas.find((a) => a.id === item.areaId)?.color : undefined;
+                  return (
+                    <div
+                      key={item.id}
+                      className={styles.dayEventDot}
+                      style={{
+                        textDecoration: item.done ? 'line-through' : 'none',
+                        borderLeft: areaColor ? `3px solid ${areaColor}` : undefined,
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => setEditItem(item)}
+                    >
+                      {icon} {item.title}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
@@ -344,15 +303,20 @@ export default function AgendaPage() {
                       </div>
                     );
                   })}
-                  {items.slice(0, 1).map((item) => (
-                    <div key={item.id} style={{
-                      fontSize: 10, padding: '1px 4px', borderRadius: 3, marginTop: 2,
-                      background: tokens.colorBrandBackground, color: '#fff',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {item.title}
-                    </div>
-                  ))}
+                  {items.slice(0, 1).map((item) => {
+                    const icon = item.icon || DEFAULT_ICONS[item.type] || '📅';
+                    const areaColor = item.areaId ? areas.find((a) => a.id === item.areaId)?.color : undefined;
+                    return (
+                      <div key={item.id} style={{
+                        fontSize: 10, padding: '1px 4px', borderRadius: 3, marginTop: 2,
+                        background: tokens.colorBrandBackground, color: '#fff',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        borderLeft: areaColor ? `3px solid ${areaColor}` : undefined,
+                      }}>
+                        {icon} {item.title}
+                      </div>
+                    );
+                  })}
                   {(items.length + dayProjects(day).length + dayTasks(day).length) > 3 && (
                     <Text size={100} style={{ color: tokens.colorNeutralForeground2 }}>
                       +{items.length + dayProjects(day).length + dayTasks(day).length - 3}

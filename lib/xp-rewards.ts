@@ -29,8 +29,7 @@ export const XP_REWARDS = {
   ARCHIVE_ITEM: 5,
 
   // Corpo
-  WORKOUT_LOG: 15,
-  WORKOUT_COMPLETE: 25,
+  WORKOUT_LOG: 25,
   MEAL_LOG: 5,
   WATER_GOAL: 10,
   THREE_MEALS_DAY: 15,
@@ -39,11 +38,18 @@ export const XP_REWARDS = {
   TRANSACTION_LOG: 5,
 } as const;
 
-export type XpGrant = { attr: AttributeKey; amount: number; reason: string };
+export interface XpGrant {
+  attr: AttributeKey;
+  amount: number;
+  reason: string;
+}
 
-export function streakBonus(streak: number): { xp: number; reason: string } | null {
-  if (streak >= 100 && streak % 100 === 0) return { xp: XP_REWARDS.HABIT_STREAK_100, reason: `🔥 Streak lendário: ${streak} dias!` };
-  if (streak >= 30 && streak % 30 === 0) return { xp: XP_REWARDS.HABIT_STREAK_30, reason: `🔥 Streak épico: ${streak} dias!` };
-  if (streak >= 7 && streak % 7 === 0) return { xp: XP_REWARDS.HABIT_STREAK_7, reason: `🔥 Streak de ${streak} dias!` };
+export function streakBonus(streak: number, attr: AttributeKey): XpGrant | null {
+  if (streak > 0 && streak % 100 === 0)
+    return { attr, amount: XP_REWARDS.HABIT_STREAK_100, reason: `🔥 Streak lendário: ${streak} dias!` };
+  if (streak > 0 && streak % 30 === 0)
+    return { attr, amount: XP_REWARDS.HABIT_STREAK_30, reason: `⭐ Streak épico: ${streak} dias!` };
+  if (streak > 0 && streak % 7 === 0)
+    return { attr, amount: XP_REWARDS.HABIT_STREAK_7, reason: `✨ Streak de ${streak} dias!` };
   return null;
 }
