@@ -101,7 +101,7 @@ export default function DashboardPage() {
   const [name, setName] = useState('');
   const [charClass, setCharClass] = useState(CLASSES[0]);
 
-  useEffect(() => { if (!user) setShowOnboarding(true); }, [user]);
+  useEffect(() => { setShowOnboarding(!user); }, [user]);
 
   const totalXp = calcTotalXp(attrXp);
   const { level, currentXp, xpForNextLevel } = getLevelFromXp(totalXp);

@@ -127,6 +127,8 @@ export interface Archive {
   archivedAt: string;
 }
 
+export type WorkoutType = 'musculacao' | 'cardio' | 'funcional' | 'mobilidade' | 'yoga';
+
 export interface WorkoutSet {
   reps?: number;
   weight?: number;
@@ -137,12 +139,16 @@ export interface WorkoutExercise {
   id: string;
   name: string;
   sets: WorkoutSet[];
+  done?: boolean;
 }
 
 export interface Workout {
   id: string;
   date: string;
   name: string;
+  type?: WorkoutType;
+  icon?: string;
+  done?: boolean;
   exercises: WorkoutExercise[];
   duration?: number;
   notes?: string;
@@ -154,6 +160,17 @@ export interface MealItem {
   protein?: number;
   carbs?: number;
   fat?: number;
+  portion?: string;
+}
+
+export type MoodEmoji = '😄' | '😊' | '😐' | '😔' | '😢';
+
+export interface JournalEntry {
+  id: string;
+  date: string;
+  content: string;
+  mood?: MoodEmoji;
+  createdAt: string;
 }
 
 export interface Meal {
@@ -173,6 +190,91 @@ export interface Transaction {
   category: string;
   description: string;
   date: string;
+}
+
+export type ClientStatus = 'ativo' | 'inativo';
+export type ProductType = 'produto' | 'servico';
+export type ProductUnit = 'un' | 'hr' | 'kg' | 'm' | 'pacote' | 'mes';
+export type InvoiceStatus = 'rascunho' | 'enviada' | 'paga' | 'vencida' | 'cancelada';
+export type ExpenseCategory =
+  | 'Aluguel' | 'Alimentação' | 'Transporte' | 'Software'
+  | 'Marketing' | 'Equipamentos' | 'Impostos' | 'Salários' | 'Outros';
+
+export interface ClientAddress {
+  street: string;
+  number: string;
+  complement?: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  zip: string;
+}
+
+export interface Client {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  document: string;
+  address: ClientAddress;
+  status: ClientStatus;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  type: ProductType;
+  description?: string;
+  price: number;
+  unit: ProductUnit;
+  taxRate: number;
+  sku?: string;
+  status: 'ativo' | 'inativo';
+  createdAt: string;
+}
+
+export interface InvoiceItem {
+  id: string;
+  productId?: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  taxRate: number;
+}
+
+export interface Payment {
+  id: string;
+  date: string;
+  amount: number;
+  notes?: string;
+}
+
+export interface Invoice {
+  id: string;
+  number: string;
+  clientId: string;
+  clientName: string;
+  issueDate: string;
+  dueDate: string;
+  items: InvoiceItem[];
+  discount: number;
+  status: InvoiceStatus;
+  payments: Payment[];
+  notes?: string;
+  createdAt: string;
+}
+
+export interface Expense {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  category: ExpenseCategory;
+  vendor?: string;
+  recurring: boolean;
+  createdAt: string;
 }
 
 export interface XPEvent {
@@ -206,11 +308,18 @@ export interface AppState {
   workouts: Workout[];
   meals: Meal[];
   finances: Transaction[];
+  clients: Client[];
+  products: Product[];
+  invoices: Invoice[];
+  expenses: Expense[];
+  savingsGoal: number;
+  savingsGoalMetMonth: string;
   waterToday: number;
   xpGainedToday: number;
   xpEvents: XPEvent[];
   xpHistory: XPEvent[];
   xpNotifications: XPNotification[];
+  journalEntries: JournalEntry[];
   darkMode: boolean;
   sidebarCollapsed: boolean;
 }

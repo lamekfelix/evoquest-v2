@@ -6,6 +6,7 @@ import { evoquestLightTheme, evoquestDarkTheme } from '@/lib/theme';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { XPToastListener } from '@/components/shared/XPToastListener';
+import { DevAutoLogin } from '@/components/shared/DevAutoLogin';
 
 interface FluentShellProps {
   children: React.ReactNode;
@@ -20,6 +21,7 @@ export function FluentShell({ children }: FluentShellProps) {
     <SSRProvider>
     <FluentProvider theme={darkMode ? evoquestDarkTheme : evoquestLightTheme} className="h-full">
       <XPToastListener />
+      {process.env.NODE_ENV === 'development' && <DevAutoLogin />}
       <div className="flex h-full min-h-screen">
         <Sidebar />
         <div

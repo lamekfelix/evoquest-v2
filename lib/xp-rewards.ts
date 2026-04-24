@@ -29,19 +29,34 @@ export const XP_REWARDS = {
   ARCHIVE_ITEM: 5,
 
   // Corpo
-  WORKOUT_LOG: 25,
+  WORKOUT_LOG: 15,
+  WORKOUT_COMPLETE: 25,
   MEAL_LOG: 5,
   WATER_GOAL: 10,
   THREE_MEALS_DAY: 15,
 
   // Finanças
   TRANSACTION_LOG: 5,
+
+  // Diário
+  JOURNAL_ENTRY: 15,
+
+  // Módulo Financeiro
+  INVOICE_PAID: 20,
+  EXPENSE_LOG: 5,
+  SAVINGS_GOAL_MET: 30,
 } as const;
 
 export interface XpGrant {
   attr: AttributeKey;
   amount: number;
   reason: string;
+}
+
+export function workoutAttr(type?: import('@/store/types').WorkoutType): AttributeKey {
+  if (type === 'cardio') return 'vitalidade';
+  if (type === 'mobilidade' || type === 'yoga') return 'equilibrio';
+  return 'forca';
 }
 
 export function streakBonus(streak: number, attr: AttributeKey): XpGrant | null {

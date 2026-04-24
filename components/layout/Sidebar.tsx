@@ -9,6 +9,7 @@ import {
 import {
   HomeRegular, HomeFilled,
   CalendarRegular, CalendarFilled,
+  NoteRegular, NoteFilled,
   TargetArrowRegular,
   FolderRegular,
   BookRegular,
@@ -23,6 +24,14 @@ import {
   SettingsRegular,
   NavigationRegular,
   ChevronDoubleLeftRegular,
+  PeopleRegular,
+  PeopleFilled,
+  BoxRegular,
+  BoxFilled,
+  ReceiptRegular,
+  ReceiptFilled,
+  ArrowTrendingDownRegular,
+  ArrowTrendingDownFilled,
 } from '@fluentui/react-icons';
 import { useAppStore } from '@/store/useAppStore';
 import { getLevelFromXp } from '@/lib/xp';
@@ -102,11 +111,13 @@ interface NavItem {
   label: string;
   icon: React.ReactElement;
   iconActive: React.ReactElement;
+  exact?: boolean;
 }
 
 const principalNav: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: <HomeRegular />, iconActive: <HomeFilled /> },
   { href: '/agenda', label: 'Agenda', icon: <CalendarRegular />, iconActive: <CalendarFilled /> },
+  { href: '/journal', label: 'Diário', icon: <NoteRegular />, iconActive: <NoteFilled /> },
 ];
 
 const sistemaNav: NavItem[] = [
@@ -127,7 +138,11 @@ const corpoNav: NavItem[] = [
 ];
 
 const financasNav: NavItem[] = [
-  { href: '/finances', label: 'Finanças', icon: <WalletRegular />, iconActive: <WalletRegular /> },
+  { href: '/finances', label: 'Dashboard Financeiro', icon: <WalletRegular />, iconActive: <WalletRegular />, exact: true },
+  { href: '/finances/clients', label: 'Clientes', icon: <PeopleRegular />, iconActive: <PeopleFilled /> },
+  { href: '/finances/products', label: 'Produtos & Serviços', icon: <BoxRegular />, iconActive: <BoxFilled /> },
+  { href: '/finances/invoices', label: 'Faturas', icon: <ReceiptRegular />, iconActive: <ReceiptFilled /> },
+  { href: '/finances/expenses', label: 'Despesas', icon: <ArrowTrendingDownRegular />, iconActive: <ArrowTrendingDownFilled /> },
 ];
 
 const rpgNav: NavItem[] = [
@@ -148,7 +163,7 @@ export function Sidebar() {
   const { level } = getLevelFromXp(totalXp);
 
   function NavLink({ item }: { item: NavItem }) {
-    const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+    const isActive = item.exact ? pathname === item.href : (pathname === item.href || pathname.startsWith(item.href + '/'));
     const content = (
       <Link
         href={item.href}

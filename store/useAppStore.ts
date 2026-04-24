@@ -6,11 +6,13 @@ import type {
   AppState, User, Habit, Project, Task, Area, Resource, Archive,
   AgendaItem, Workout, Meal, Transaction, AttributeKey,
   ProjectStatus, TaskStatus, TodoItem, XPEvent, XPNotification,
+  JournalEntry, Client, Product, Invoice, Payment,
+  Expense, InvoiceStatus,
 } from './types';
 import { INITIAL_ATTR_XP } from './constants';
 import { calcTotalXp, getLevelFromXp } from '@/lib/xp';
 import { generateId, dateISO } from '@/lib/utils';
-import { XP_REWARDS, streakBonus } from '@/lib/xp-rewards';
+import { XP_REWARDS, streakBonus, workoutAttr } from '@/lib/xp-rewards';
 import type { XpGrant } from '@/lib/xp-rewards';
 
 // Applies XP grants to state, returns the state delta
@@ -96,6 +98,9 @@ interface AppActions {
 
   addWorkout: (w: Omit<Workout, 'id'>) => void;
   deleteWorkout: (id: string) => void;
+  completeWorkout: (id: string) => void;
+  addJournalEntry: (entry: Omit<JournalEntry, 'id' | 'createdAt'>) => void;
+  updateJournalEntry: (id: string, partial: Partial<JournalEntry>) => void;
 
   addMeal: (m: Omit<Meal, 'id'>) => void;
   deleteMeal: (id: string) => void;
@@ -106,6 +111,28 @@ interface AppActions {
   setWaterToday: (ml: number) => void;
 
   dismissXpNotification: (id: string) => void;
+
+  addClient: (client: Omit<Client, 'id' | 'createdAt'>) => void;
+  updateClient: (id: string, partial: Partial<Client>) => void;
+  deleteClient: (id: string) => void;
+
+  addProduct: (product: Omit<Product, 'id' | 'createdAt'>) => void;
+  updateProduct: (id: string, partial: Partial<Product>) => void;
+  deleteProduct: (id: string) => void;
+
+  addInvoice: (invoice: Omit<Invoice, 'id' | 'number' | 'createdAt'>) => void;
+  updateInvoice: (id: string, partial: Partial<Invoice>) => void;
+  deleteInvoice: (id: string) => void;
+  updateInvoiceStatus: (id: string, status: InvoiceStatus) => void;
+  addInvoicePayment: (invoiceId: string, payment: Omit<Payment, 'id'>) => void;
+  duplicateInvoice: (id: string) => void;
+
+  addExpense: (expense: Omit<Expense, 'id' | 'createdAt'>) => void;
+  updateExpense: (id: string, partial: Partial<Expense>) => void;
+  deleteExpense: (id: string) => void;
+
+  setSavingsGoal: (amount: number) => void;
+  checkSavingsGoalMet: (currentBalance: number) => void;
 }
 
 const initialState: AppState = {
@@ -121,11 +148,18 @@ const initialState: AppState = {
   workouts: [],
   meals: [],
   finances: [],
+  clients: [],
+  products: [],
+  invoices: [],
+  expenses: [],
+  savingsGoal: 0,
+  savingsGoalMetMonth: '',
   waterToday: 0,
   xpGainedToday: 0,
   xpEvents: [],
   xpHistory: [],
   xpNotifications: [],
+  journalEntries: [],
   darkMode: false,
   sidebarCollapsed: false,
 };
@@ -418,13 +452,38 @@ export const useAppStore = create<AppState & AppActions>()(
       // ── Workout ───────────────────────────────────────────────────────────
 
       addWorkout: (w) =>
-        set((s) => ({
-          workouts: [...s.workouts, { ...w, id: generateId() }],
-          ...applyXp(s, [{ attr: 'forca', amount: XP_REWARDS.WORKOUT_LOG, reason: `Treino: ${w.name}` }]),
-        })),
+        set((s) => {
+          const attr = workoutAttr((w as Workout).type);
+          return {
+            workouts: [...s.workouts, { ...w, id: generateId() }],
+            ...applyXp(s, [{ attr, amount: XP_REWARDS.WORKOUT_LOG, reason: `Treino: ${w.name}` }]),
+          };
+        }),
 
       deleteWorkout: (id) =>
         set((s) => ({ workouts: s.workouts.filter((w) => w.id !== id) })),
+
+      completeWorkout: (id) =>
+        set((s) => {
+          const w = s.workouts.find((x) => x.id === id);
+          if (!w || w.done) return s;
+          const attr = workoutAttr(w.type);
+          return {
+            workouts: s.workouts.map((x) => (x.id === id ? { ...x, done: true } : x)),
+            ...applyXp(s, [{ attr, amount: XP_REWARDS.WORKOUT_COMPLETE, reason: `Treino concluído: ${w.name}` }]),
+          };
+        }),
+
+      addJournalEntry: (entry) =>
+        set((s) => ({
+          journalEntries: [...s.journalEntries, { ...entry, id: generateId(), createdAt: dateISO() }],
+          ...applyXp(s, [{ attr: 'sabedoria', amount: XP_REWARDS.JOURNAL_ENTRY, reason: 'Reflexão diária escrita!' }]),
+        })),
+
+      updateJournalEntry: (id, partial) =>
+        set((s) => ({
+          journalEntries: s.journalEntries.map((e) => (e.id === id ? { ...e, ...partial } : e)),
+        })),
 
       // ── Refeições ─────────────────────────────────────────────────────────
 
@@ -440,6 +499,104 @@ export const useAppStore = create<AppState & AppActions>()(
 
       deleteMeal: (id) =>
         set((s) => ({ meals: s.meals.filter((m) => m.id !== id) })),
+
+      // ── Clientes ──────────────────────────────────────────────────────────
+
+      addClient: (client) =>
+        set((s) => ({ clients: [...s.clients, { ...client, id: generateId(), createdAt: dateISO() }] })),
+
+      updateClient: (id, partial) =>
+        set((s) => ({ clients: s.clients.map((c) => (c.id === id ? { ...c, ...partial } : c)) })),
+
+      deleteClient: (id) =>
+        set((s) => ({ clients: s.clients.filter((c) => c.id !== id) })),
+
+      // ── Produtos ──────────────────────────────────────────────────────────
+
+      addProduct: (product) =>
+        set((s) => ({ products: [...s.products, { ...product, id: generateId(), createdAt: dateISO() }] })),
+
+      updateProduct: (id, partial) =>
+        set((s) => ({ products: s.products.map((p) => (p.id === id ? { ...p, ...partial } : p)) })),
+
+      deleteProduct: (id) =>
+        set((s) => ({ products: s.products.filter((p) => p.id !== id) })),
+
+      // ── Faturas ───────────────────────────────────────────────────────────
+
+      addInvoice: (invoice) =>
+        set((s) => {
+          const number = `INV-${String(s.invoices.length + 1).padStart(3, '0')}`;
+          return { invoices: [...s.invoices, { ...invoice, id: generateId(), number, createdAt: dateISO() }] };
+        }),
+
+      updateInvoice: (id, partial) =>
+        set((s) => ({ invoices: s.invoices.map((inv) => (inv.id === id ? { ...inv, ...partial } : inv)) })),
+
+      deleteInvoice: (id) =>
+        set((s) => ({ invoices: s.invoices.filter((inv) => inv.id !== id) })),
+
+      updateInvoiceStatus: (id, status) =>
+        set((s) => {
+          const inv = s.invoices.find((i) => i.id === id);
+          if (!inv) return s;
+          const wasPaid = inv.status === 'paga';
+          const newInvoices = s.invoices.map((i) => (i.id === id ? { ...i, status } : i));
+          const grants: XpGrant[] = [];
+          if (status === 'paga' && !wasPaid)
+            grants.push({ attr: 'disciplina', amount: XP_REWARDS.INVOICE_PAID, reason: `Fatura ${inv.number} paga! +20 XP` });
+          return { invoices: newInvoices, ...applyXp(s, grants) };
+        }),
+
+      addInvoicePayment: (invoiceId, payment) =>
+        set((s) => ({
+          invoices: s.invoices.map((inv) =>
+            inv.id === invoiceId
+              ? { ...inv, payments: [...inv.payments, { ...payment, id: generateId() }] }
+              : inv
+          ),
+        })),
+
+      duplicateInvoice: (id) =>
+        set((s) => {
+          const inv = s.invoices.find((i) => i.id === id);
+          if (!inv) return s;
+          const number = `INV-${String(s.invoices.length + 1).padStart(3, '0')}`;
+          return {
+            invoices: [
+              ...s.invoices,
+              { ...inv, id: generateId(), number, status: 'rascunho' as const, payments: [], issueDate: dateISO(), createdAt: dateISO() },
+            ],
+          };
+        }),
+
+      // ── Despesas ──────────────────────────────────────────────────────────
+
+      addExpense: (expense) =>
+        set((s) => ({
+          expenses: [...s.expenses, { ...expense, id: generateId(), createdAt: dateISO() }],
+          ...applyXp(s, [{ attr: 'disciplina', amount: XP_REWARDS.EXPENSE_LOG, reason: `Despesa: ${expense.description}` }]),
+        })),
+
+      updateExpense: (id, partial) =>
+        set((s) => ({ expenses: s.expenses.map((e) => (e.id === id ? { ...e, ...partial } : e)) })),
+
+      deleteExpense: (id) =>
+        set((s) => ({ expenses: s.expenses.filter((e) => e.id !== id) })),
+
+      // ── Meta de Economia ──────────────────────────────────────────────────
+
+      setSavingsGoal: (amount) => set({ savingsGoal: amount }),
+
+      checkSavingsGoalMet: (currentBalance) =>
+        set((s) => {
+          const currentMonth = dateISO().slice(0, 7);
+          if (s.savingsGoal <= 0 || currentBalance < s.savingsGoal || s.savingsGoalMetMonth === currentMonth) return s;
+          return {
+            savingsGoalMetMonth: currentMonth,
+            ...applyXp(s, [{ attr: 'resiliencia', amount: XP_REWARDS.SAVINGS_GOAL_MET, reason: 'Meta de economia atingida! +30 XP' }]),
+          };
+        }),
 
       // ── UI ────────────────────────────────────────────────────────────────
 

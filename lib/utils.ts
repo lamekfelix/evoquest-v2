@@ -34,3 +34,11 @@ export function getStartOfWeek(date: Date): Date {
   d.setDate(diff);
   return d;
 }
+
+export function calcInvoiceTotals(invoice: import('@/store/types').Invoice) {
+  const subtotal = invoice.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+  const taxTotal = invoice.items.reduce((s, i) => s + i.quantity * i.unitPrice * (i.taxRate / 100), 0);
+  const grandTotal = subtotal + taxTotal - invoice.discount;
+  const paidTotal = invoice.payments.reduce((s, p) => s + p.amount, 0);
+  return { subtotal, taxTotal, grandTotal, paidTotal, balance: grandTotal - paidTotal };
+}
